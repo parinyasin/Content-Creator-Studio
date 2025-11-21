@@ -1,76 +1,33 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-import { GoogleGenAI } from "@google/genai";
-import { ImageStyle } from "../types";
+// 🔑 กุญแจ (ใส่ไว้เหมือนเดิม)
+const API_KEY = "AIzaSyDgBINcYmdNcz9B1Cugv_0RAF7D0dp9Akc";
 
-const getClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API Key not found");
-  return new GoogleGenAI({ apiKey });
-};
+const genAI = new GoogleGenerativeAI(API_KEY);
 
-export const rewriteContent = async (text: string): Promise<string> => {
-  const ai = getClient();
-  const prompt = `
-    You are a professional Facebook content editor. 
-    Rewrite the following text content in THAI (unless the input is clearly English, then use English).
-    
-    Rules:
-    1. Summarize and organize the content.
-    2. Make it easy to read, concise, and catchy.
-    3. Use correct main points.
-    4. STRICTLY NO EMOJIS, NO EMOTICONS. Avoid decorative symbols.
-    5. DO NOT use markdown bold syntax (like **text**) or italics. Facebook does not support markdown formatting.
-    6. For headings or emphasized sections, use the '#' symbol as a prefix WITHOUT A SPACE (e.g., #Heading, NOT # Heading). This is critical so they function as hashtags on Facebook.
-    7. Use clear paragraph spacing.
-    8. Add relevant and popular hashtags at the end for better search visibility (SEO).
-    9. **MANDATORY**: You MUST include the brand hashtag: #การะเกต์พยากรณ์
-    10. Return ONLY the rewritten text followed by the hashtags.
-
-    Content to rewrite:
-    ${text}
-  `;
-
+// ฟังก์ชันหลัก: เขียนคอนเทนต์ (แบบง่ายสุดๆ)
+export const rewriteContent = async (text: string) => {
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-    return response.text || "Could not generate text.";
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" }); // ใช้รุ่น Pro มาตรฐาน
+
+    const prompt = `
+      ช่วยเขียนโพสต์ Facebook จากข้อความนี้ให้น่าสนใจ: "${text}"
+      (ขอสั้นๆ กระชับ ใส่ Emoji ได้นิดหน่อย)
+    `;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text(); // ส่งข้อความกลับไปเลย ไม่ต้องแปลง JSON
+
   } catch (error) {
-    console.error("Rewrite error:", error);
-    throw error;
+    console.error("AI Error:", error);
+    // ถ้าพัง ให้ส่งข้อความนี้กลับไป (อย่างน้อยแอพไม่แดง)
+    return "ขออภัย ระบบกำลังประมวลผลหนาแน่น กรุณาลองใหม่อีกครั้ง";
   }
 };
 
-export const generateImage = async (prompt: string, style: ImageStyle): Promise<string> => {
-  const ai = getClient();
-  
-  // Simplified prompt as we now use config for aspect ratio
-  const finalPrompt = `${style}. Subject: ${prompt}. High quality, aesthetic, visually pleasing for a poster background.`;
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview', 
-      contents: {
-        parts: [{ text: finalPrompt }],
-      },
-      config: {
-        imageConfig: {
-          aspectRatio: "3:4", // Native aspect ratio support for 1080x1500 target
-          imageSize: "1K"
-        }
-      }
-    });
-
-    // Extract image
-    const part = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-    if (part && part.inlineData && part.inlineData.data) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-    }
-    
-    throw new Error("No image data returned. The model may have refused the prompt.");
-  } catch (error) {
-    console.error("Image gen error:", error);
-    throw error;
-  }
+// ฟังก์ชันสร้างภาพ (ใช้แบบฟรี)
+export const generateImage = async (prompt: string) => {
+  const seed = Math.floor(Math.random() * 1000);
+  return `https://pollinations.ai/p/${encodeURIComponent(prompt)}?width=1080&height=1080&seed=${seed}`;
 };
