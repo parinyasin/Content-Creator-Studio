@@ -42,9 +42,5 @@ declare global {
     mammoth: any;
     JSZip: any;
     saveAs: (data: Blob | string, filename: string) => void;
-    aistudio?: {
-      hasSelectedApiKey(): Promise<boolean>;
-      openSelectKey(): Promise<void>;
-    };
   }
 }

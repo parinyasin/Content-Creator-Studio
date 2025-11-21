@@ -73,9 +73,18 @@ export const ImageStudio: React.FC<ImageStudioProps> = ({ initialPrompt, onImage
       setBgPosition({ x: 0, y: 0 });
       setBgScale(1);
     } catch (e: any) {
-      const errorMessage = e?.message || '';
-      if (errorMessage.includes('Requested entity was not found') && window.aistudio) {
-        alert("API Key session expired or invalid. Please select your key again.");
+      console.error("Generation error:", e);
+      const errorMessage = e?.message || JSON.stringify(e);
+      
+      // Handle Permission Denied (403) and Not Found (404) which often indicate key issues
+      if (
+        (errorMessage.includes('403') || 
+         errorMessage.includes('PERMISSION_DENIED') || 
+         errorMessage.includes('The caller does not have permission') ||
+         errorMessage.includes('Requested entity was not found')) && 
+        window.aistudio
+      ) {
+        alert("To use the high-quality Image Generation model, a valid Paid API Key is required. Please select your key.");
         await window.aistudio.openSelectKey();
       } else {
         alert("Failed to generate image. " + errorMessage);
@@ -200,31 +209,51 @@ export const ImageStudio: React.FC<ImageStudioProps> = ({ initialPrompt, onImage
     setSelectedId(null);
 
     // 2. Wait for render cycle (small timeout)
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 100));
     
-    const scale = getResponsiveScale();
-    const inverseScale = 1 / scale;
-
+    // 3. Create a high-fidelity clone of the canvas for export
+    // This works around issues with CSS transforms (scale) and html2canvas
+    const original = canvasRef.current;
+    const clone = original.cloneNode(true) as HTMLElement;
+    
+    // Setup clone styles to be 1:1 size and hidden from view but renderable
+    clone.style.position = 'fixed';
+    clone.style.top = '0';
+    clone.style.left = '0';
+    clone.style.zIndex = '-9999'; // Behind everything
+    clone.style.transform = 'none'; // Remove the responsive scaling
+    clone.style.width = `${CANVAS_WIDTH}px`;
+    clone.style.height = `${CANVAS_HEIGHT}px`;
+    clone.style.boxShadow = 'none';
+    clone.style.margin = '0';
+    
+    document.body.appendChild(clone);
+    
     try {
-      const canvas = await window.html2canvas(canvasRef.current, {
-        scale: inverseScale, // Ensure 1:1 export based on 1080x1500
+      const canvas = await window.html2canvas(clone, {
+        scale: 1, 
         useCORS: true, 
-        backgroundColor: '#000000',
+        backgroundColor: null, // Transparent background
         width: CANVAS_WIDTH,
         height: CANVAS_HEIGHT,
-        logging: false
+        logging: false,
+        // We don't use onclone here because we already manually cloned and prepped the element
       });
       
       const link = document.createElement('a');
-      link.download = 'facebook-content.png';
+      link.download = `facebook-content-${Date.now()}.png`;
       link.href = canvas.toDataURL('image/png');
       link.click();
     } catch (err) {
       console.error(err);
       alert("Could not save image.");
     } finally {
-        // Restore selection if needed, but usually better to leave deselected to show result state
-        // setSelectedId(previousSelection); 
+        // Cleanup
+        if (document.body.contains(clone)) {
+            document.body.removeChild(clone);
+        }
+        // Restore selection if needed
+         setSelectedId(previousSelection); 
     }
   };
 
@@ -442,6 +471,7 @@ export const ImageStudio: React.FC<ImageStudioProps> = ({ initialPrompt, onImage
       {/* Center: Canvas Workspace */}
       <div className="flex-1 bg-slate-800 rounded-lg overflow-hidden relative flex items-center justify-center shadow-inner cursor-default">
         <div 
+            id="studio-canvas"
             style={{ 
                 width: CANVAS_WIDTH, 
                 height: CANVAS_HEIGHT, 
