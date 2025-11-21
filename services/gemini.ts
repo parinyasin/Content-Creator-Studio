@@ -1,23 +1,17 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 
-// 🔑 กุญแจ (ใส่ไว้เหมือนเดิม)
-const API_KEY = "AIzaSyDgBINcYmdNcz9B1Cugv_0RAF7D0dp9Akc";
-
-const genAI = new GoogleGenerativeAI(API_KEY);
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // ฟังก์ชันหลัก: เขียนคอนเทนต์ (แบบง่ายสุดๆ)
 export const rewriteContent = async (text: string) => {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" }); // ใช้รุ่น Pro มาตรฐาน
+    // Use gemini-2.5-flash as recommended for text tasks
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash",
+      contents: `ช่วยเขียนโพสต์ Facebook จากข้อความนี้ให้น่าสนใจ: "${text}"\n(ขอสั้นๆ กระชับ ใส่ Emoji ได้นิดหน่อย)`
+    });
 
-    const prompt = `
-      ช่วยเขียนโพสต์ Facebook จากข้อความนี้ให้น่าสนใจ: "${text}"
-      (ขอสั้นๆ กระชับ ใส่ Emoji ได้นิดหน่อย)
-    `;
-
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text(); // ส่งข้อความกลับไปเลย ไม่ต้องแปลง JSON
+    return response.text || "ไม่สามารถสร้างข้อความได้";
 
   } catch (error) {
     console.error("AI Error:", error);
