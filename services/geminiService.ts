@@ -1,27 +1,39 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// 🔑 กุญแจของคุณ (ฝังตรงนี้เพื่อความชัวร์ 100%)
+const API_KEY = "AIzaSyDgBINcYmdNcz9B1Cugv_0RAF7D0dp9Akc";
 
-// ฟังก์ชันหลัก: เขียนคอนเทนต์ (แบบง่ายสุดๆ)
+const genAI = new GoogleGenerativeAI(API_KEY);
+
+// ฟังก์ชันสำหรับเขียนคอนเทนต์ (ใช้ชื่อ rewriteContent ให้ตรงกับหน้าบ้าน)
 export const rewriteContent = async (text: string) => {
   try {
-    // Use gemini-2.5-flash as recommended for text tasks
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: `ช่วยเขียนโพสต์ Facebook จากข้อความนี้ให้น่าสนใจ: "${text}"\n(ขอสั้นๆ กระชับ ใส่ Emoji ได้นิดหน่อย)`
-    });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    const prompt = `
+      บทบาท: คุณคือ Content Creator มืออาชีพ
+      งาน: ช่วยเขียนโพสต์ Facebook จากข้อความนี้ให้น่าสนใจ: "${text}"
+      
+      คำสั่ง:
+      1. เขียนให้น่าอ่าน แบ่งย่อหน้าสวยงาม
+      2. ใส่อารมณ์ให้ดูเป็นธรรมชาติ
+      3. ใส่ Emoji ประกอบนิดหน่อยให้น่ารัก
+      4. ติด Hashtag ที่เกี่ยวข้อง
+    `;
 
-    return response.text || "ไม่สามารถสร้างข้อความได้";
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    return response.text();
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("AI Error:", error);
-    // ถ้าพัง ให้ส่งข้อความนี้กลับไป (อย่างน้อยแอพไม่แดง)
-    return "ขออภัย ระบบกำลังประมวลผลหนาแน่น กรุณาลองใหม่อีกครั้ง";
+    return "เกิดข้อผิดพลาดในการเชื่อมต่อ AI: " + (error.message || "กรุณาลองใหม่อีกครั้ง");
   }
 };
 
-// ฟังก์ชันสร้างภาพ (ใช้แบบฟรี)
-export const generateImage = async (prompt: string) => {
+// ฟังก์ชันสำหรับสร้างภาพ (ใช้ Pollinations)
+export const generateIllustration = async (prompt: string) => {
   const seed = Math.floor(Math.random() * 1000);
-  return `https://pollinations.ai/p/${encodeURIComponent(prompt)}?width=1080&height=1080&seed=${seed}`;
+  const finalPrompt = encodeURIComponent(prompt + ", high quality, 8k, masterpiece");
+  return `https://pollinations.ai/p/${finalPrompt}?width=1080&height=1080&seed=${seed}&model=flux`;
 };

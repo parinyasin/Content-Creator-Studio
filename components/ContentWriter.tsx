@@ -1,174 +1,92 @@
-import React, { useState, useRef } from 'react';
-import { rewriteContent } from '../services/gemini';
-import { ClipboardCopy, Download, FileText, RefreshCw, Wand2, FileDown, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { rewriteContent } from '../services/geminiService'; // เรียกใช้ไฟล์ service ที่เพิ่งแก้
+import { Wand2, Copy, AlertCircle, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface ContentWriterProps {
-  onContentUpdate: (text: string) => void;
+  onContentGenerated?: (content: string) => void;
 }
 
-export const ContentWriter: React.FC<ContentWriterProps> = ({ onContentUpdate }) => {
-  const [inputText, setInputText] = useState('');
-  const [outputText, setOutputText] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+export const ContentWriter: React.FC<ContentWriterProps> = ({ onContentGenerated }) => {
+  const [sourceText, setSourceText] = useState('');
+  const [optimizedContent, setOptimizedContent] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
 
   const handleRewrite = async () => {
-    if (!inputText.trim()) return;
-    setIsLoading(true);
-    setError(null);
-    try {
-      const result = await rewriteContent(inputText);
-      setOutputText(result);
-      onContentUpdate(result); // Notify parent/other components if needed
-    } catch (err) {
-      setError("Failed to rewrite content. Please try again.");
-    } finally {
-      setIsLoading(false);
+    if (!sourceText.trim()) {
+      toast.error('กรุณาใส่เนื้อหาต้นฉบับก่อนครับ');
+      return;
     }
-  };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(outputText);
-    alert("Copied to clipboard!");
-  };
-
-  const handleSaveAsDoc = () => {
-    // Create a simple HTML structure that Word can interpret as a document
-    const content = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head>
-        <meta charset='utf-8'>
-        <title>Export</title>
-        <style>body { font-family: 'Sarabun', sans-serif; font-size: 16px; line-height: 1.5; }</style>
-      </head>
-      <body>${outputText.replace(/\n/g, '<br>')}</body>
-      </html>
-    `;
-    
-    const blob = new Blob([content], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'facebook_content.doc'; // Saving as .doc for compatibility
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleSaveAsText = () => {
-    const element = document.createElement("a");
-    const file = new Blob([outputText], { type: 'text/plain' });
-    element.href = URL.createObjectURL(file);
-    element.download = "facebook_content.txt";
-    document.body.appendChild(element);
-    element.click();
-    document.body.removeChild(element);
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setError(null);
-    setIsLoading(true);
+    setIsGenerating(true);
+    setOptimizedContent(''); // เคลียร์ค่าเก่า
 
     try {
-      const ext = file.name.split('.').pop()?.toLowerCase();
+      // เรียกใช้ฟังก์ชัน rewriteContent ที่เราเตรียมไว้
+      const result = await rewriteContent(sourceText);
       
-      if (ext === 'txt' || ext === 'md') {
-        const text = await file.text();
-        setInputText(text);
-      } else if (ext === 'pdf') {
-        if (!window.pdfjsLib) throw new Error("PDF Library not loaded");
-        const arrayBuffer = await file.arrayBuffer();
-        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-        let fullText = "";
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const content = await page.getTextContent();
-            fullText += content.items.map((item: any) => item.str).join(' ') + "\n\n";
-        }
-        setInputText(fullText);
-      } else if (ext === 'docx') {
-        if (!window.mammoth) throw new Error("Docx Library not loaded");
-        const arrayBuffer = await file.arrayBuffer();
-        const result = await window.mammoth.extractRawText({ arrayBuffer });
-        setInputText(result.value);
-      } else if (ext === 'doc' || ext === 'pages') {
-        setError("Note: .doc (legacy) and .pages files are binary formats that are difficult to read directly in a browser. Please save them as .docx or .pdf, or copy-paste the text.");
-        setIsLoading(false);
-        return;
-      } else {
-        setError("Unsupported file format. Please use .txt, .md, .docx, or .pdf");
+      setOptimizedContent(result);
+      if (onContentGenerated) {
+        onContentGenerated(result);
       }
+      toast.success('เขียนคอนเทนต์เสร็จแล้ว!');
+      
     } catch (err) {
       console.error(err);
-      setError("Failed to read file. Ensure it is a valid document.");
+      toast.error('เกิดข้อผิดพลาด ลองใหม่อีกครั้ง');
+      setOptimizedContent('ระบบขัดข้อง กรุณากดปุ่มลองใหม่อีกครั้ง');
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
     }
   };
 
   return (
-    <div className="flex flex-col h-full gap-4 p-4 bg-white rounded-lg shadow-sm border border-slate-200">
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-          <FileText className="w-5 h-5" /> Content Writer
-        </h2>
-        <label className="cursor-pointer text-xs font-medium bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-md transition text-slate-600 flex items-center gap-1">
-          <FileDown className="w-3 h-3" /> Import (PDF/Docx/Txt)
-          <input type="file" className="hidden" accept=".txt,.md,.pdf,.docx,.doc,.pages" onChange={handleFileUpload} />
-        </label>
-      </div>
+    <div className="space-y-6 h-full flex flex-col">
+        {/* ส่วนกรอกข้อมูล */}
+        <div className="space-y-2">
+            <label className="font-bold text-slate-700 text-sm">ต้นฉบับ (Source)</label>
+            <textarea 
+                value={sourceText}
+                onChange={(e) => setSourceText(e.target.value)}
+                className="w-full h-32 p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none resize-none text-sm"
+                placeholder="วางข้อความที่ต้องการให้ AI เขียนใหม่..."
+            />
+        </div>
 
-      {/* Input Area */}
-      <div className="flex-1 flex flex-col min-h-[200px]">
-        <label className="text-xs font-semibold text-slate-500 mb-1 uppercase">Source Content</label>
-        <textarea
-          className="flex-1 w-full p-3 border border-slate-200 rounded-md resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-700 text-sm mb-2"
-          placeholder="Paste text or upload .docx/.pdf..."
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-        />
-        <button
-          onClick={handleRewrite}
-          disabled={isLoading || !inputText}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-md font-medium transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        {/* ปุ่มกด */}
+        <button 
+            onClick={handleRewrite}
+            disabled={isGenerating}
+            className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-70 shadow-md"
         >
-          {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
-          Rewrite for Facebook
+            {isGenerating ? (
+                <> <Loader2 className="w-5 h-5 animate-spin"/> กำลังเขียน... </>
+            ) : (
+                <> <Wand2 className="w-5 h-5"/> เขียนใหม่ให้น่าสนใจ (Rewrite) </>
+            )}
         </button>
-      </div>
 
-      {/* Output Area */}
-      <div className="flex-1 flex flex-col relative min-h-[200px]">
-        <label className="text-xs font-semibold text-slate-500 mb-1 uppercase">Optimized Content</label>
-        <textarea
-          className="flex-1 w-full p-3 bg-slate-50 border border-slate-200 rounded-md resize-none text-slate-700 text-sm font-sarabun"
-          readOnly
-          placeholder="AI generated content will appear here..."
-          value={outputText}
-        />
-        
-        {error && (
-          <div className="flex items-center gap-2 text-red-500 text-xs mt-1">
-            <AlertCircle className="w-3 h-3" /> {error}
-          </div>
-        )}
-
-        {outputText && (
-          <div className="absolute bottom-3 right-3 flex gap-2">
-            <button onClick={handleCopy} className="p-2 bg-white border border-slate-200 rounded-full shadow-sm hover:bg-slate-50 text-slate-600 transition" title="Copy to Clipboard">
-              <ClipboardCopy className="w-4 h-4" />
-            </button>
-            <button onClick={handleSaveAsText} className="p-2 bg-white border border-slate-200 rounded-full shadow-sm hover:bg-slate-50 text-slate-600 transition" title="Save as Text">
-              <Download className="w-4 h-4" />
-            </button>
-            <button onClick={handleSaveAsDoc} className="p-2 bg-blue-50 border border-blue-100 rounded-full shadow-sm hover:bg-blue-100 text-blue-600 transition" title="Save as .doc">
-              <FileText className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-      </div>
+        {/* ส่วนผลลัพธ์ */}
+        <div className="space-y-2 flex-grow flex flex-col">
+            <label className="font-bold text-slate-700 text-sm">ผลลัพธ์จาก AI</label>
+            <div className="relative flex-grow">
+                <textarea 
+                    readOnly
+                    value={optimizedContent}
+                    className="w-full h-full min-h-[200px] p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 resize-none focus:outline-none font-sans leading-relaxed"
+                    placeholder="AI จะเขียนคอนเทนต์ใหม่ให้ตรงนี้..."
+                />
+                {optimizedContent && (
+                    <button 
+                        onClick={() => {navigator.clipboard.writeText(optimizedContent); toast.success('คัดลอกแล้ว');}}
+                        className="absolute top-2 right-2 p-2 bg-white/80 backdrop-blur-sm rounded-lg shadow-sm hover:bg-blue-50 text-slate-600 transition-all"
+                        title="Copy to clipboard"
+                    >
+                        <Copy className="w-4 h-4"/>
+                    </button>
+                )}
+            </div>
+        </div>
     </div>
   );
 };
