@@ -1,154 +1,180 @@
 import React, { useState } from 'react';
-import { ContentWriter } from './components/ContentWriter';
-import { ImageStudio } from './components/ImageStudio';
-import { ActiveTab } from './types';
-import { LayoutGrid, PenTool, Image as ImageIcon, Menu, FolderDown } from 'lucide-react';
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { Sparkles, Image as ImageIcon, Copy, Download, Loader2 } from 'lucide-react';
+import toast, { Toaster } from 'react-hot-toast';
 
-const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<ActiveTab>('content');
-  const [currentContent, setCurrentContent] = useState(''); 
-  // Track current generated/uploaded image for the Zip exporter
-  const [currentImage, setCurrentImage] = useState<string | null>(null);
+// 🔑 API KEY (ฝังไว้)
+const API_KEY = "AIzaSyDgBINcYmdNcz9B1Cugv_0RAF7D0dp9Akc";
+const genAI = new GoogleGenerativeAI(API_KEY);
 
-  const handleContentUpdate = (text: string) => {
-    setCurrentContent(text);
+function App() {
+  // States สำหรับ Content
+  const [contentInput, setContentInput] = useState("The future of AI in creative writing and digital art generation.");
+  const [contentOutput, setContentOutput] = useState("");
+  const [isContentLoading, setIsContentLoading] = useState(false);
+
+  // States สำหรับ Image
+  const [imageInput, setImageInput] = useState("A futuristic city with flying vehicles at sunset, cyberpunk style");
+  const [imageOutput, setImageOutput] = useState("");
+  const [isImageLoading, setIsImageLoading] = useState(false);
+
+  // ฟังก์ชันเขียนคอนเทนต์
+  const handleRewrite = async () => {
+    if (!contentInput.trim()) return;
+    setIsContentLoading(true);
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+      const result = await model.generateContent(`Rewrite this nicely for a social media post, keep it engaging but concise: "${contentInput}"`);
+      setContentOutput(result.response.text());
+      toast.success("Content rewritten!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to rewrite content.");
+    } finally {
+      setIsContentLoading(false);
+    }
   };
 
-  const handleImageUpdate = (imageUrl: string) => {
-    setCurrentImage(imageUrl);
+  // ฟังก์ชันสร้างภาพ
+  const handleGenerateImage = async () => {
+    if (!imageInput.trim()) return;
+    setIsImageLoading(true);
+    try {
+        // ใช้ Pollinations AI
+        const seed = Math.floor(Math.random() * 1000);
+        const url = `https://pollinations.ai/p/${encodeURIComponent(imageInput)}?width=1280&height=720&seed=${seed}&model=flux`;
+        
+        // Pre-load image to check if it works
+        const img = new Image();
+        img.onload = () => {
+            setImageOutput(url);
+            setIsImageLoading(false);
+            toast.success("Image generated!");
+        };
+        img.src = url;
+
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to generate image.");
+      setIsImageLoading(false);
+    }
   };
 
-  const handleExportProject = async () => {
-    if (!window.JSZip || !window.saveAs) {
-      alert("Export library not loaded yet. Please wait.");
-      return;
-    }
-
-    const zip = new window.JSZip();
-    const folder = zip.folder("Facebook_Content_Project");
-
-    // Add Content Doc
-    if (currentContent) {
-      const docContent = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>Export</title></head>
-      <body>${currentContent.replace(/\n/g, '<br>')}</body>
-      </html>`;
-      folder.file("content.doc", docContent);
-      folder.file("content.txt", currentContent);
-    }
-
-    // Add Image (This is a bit tricky without capturing the canvas again, 
-    // so we just save the raw background image if available, or we warn user.
-    // A full canvas capture requires calling html2canvas from ImageStudio.
-    // For this "Project Save", we'll save the source assets or the last known state.
-    // Ideally, we would trigger a capture in ImageStudio, but that requires complex Ref forwarding.
-    // For now, we save the text + the background image used.)
-    if (currentImage) {
-        // Convert data URL to blob
-        const response = await fetch(currentImage);
-        const blob = await response.blob();
-        folder.file("background_image.png", blob);
-    }
-
-    if (!currentContent && !currentImage) {
-        alert("Nothing to export!");
-        return;
-    }
-
-    const content = await zip.generateAsync({ type: "blob" });
-    window.saveAs(content, "project_bundle.zip");
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard!");
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-slate-100">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shadow-sm z-50 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center text-white shadow-md">
-            <LayoutGrid className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="font-bold text-slate-800 text-lg leading-tight">Content Creator Studio</h1>
-            <p className="text-xs text-slate-500">AI-Powered Facebook Editor</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-zinc-950 text-zinc-200 p-6 md:p-12">
+      <Toaster position="bottom-center" />
+      <div className="max-w-3xl mx-auto space-y-12">
         
-        <div className="flex items-center gap-4">
-            {/* Desktop Nav */}
-            <div className="hidden md:flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-            <button 
-                onClick={() => setActiveTab('content')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${activeTab === 'content' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-                <PenTool className="w-4 h-4" /> Write Content
-            </button>
-            <button 
-                onClick={() => setActiveTab('studio')}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition flex items-center gap-2 ${activeTab === 'studio' ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-                <ImageIcon className="w-4 h-4" /> Image Studio
-            </button>
-            </div>
-            
-            <button 
-                onClick={handleExportProject}
-                className="hidden md:flex bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded-md text-sm font-medium items-center gap-2 transition"
-                title="Download Text & Image as Zip"
-            >
-                <FolderDown className="w-4 h-4" /> Save Project
-            </button>
-        </div>
+        <header>
+          <h1 className="text-3xl font-bold text-white mb-2">Content & Image Generator</h1>
+          <p className="text-zinc-400">AI-powered tools for your creative needs.</p>
+        </header>
 
-        {/* Mobile Menu Icon (Placeholder) */}
-        <button className="md:hidden p-2 text-slate-600" onClick={handleExportProject}>
-            <FolderDown className="w-6 h-6"/>
-        </button>
-      </header>
-
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-hidden relative">
-        <div className="hidden xl:flex h-full w-full p-4 gap-4">
-            <div className="w-1/3 h-full">
-                <ContentWriter onContentUpdate={handleContentUpdate} />
+        {/* === Section 1: Content === */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-indigo-600/20 p-2 rounded-lg">
+              <Sparkles className="w-6 h-6 text-indigo-500" />
             </div>
-            <div className="w-2/3 h-full">
-                <ImageStudio 
-                    initialPrompt={currentContent.slice(0, 100)} 
-                    onImageUpdate={handleImageUpdate}
+            <h2 className="text-xl font-semibold text-white">Content</h2>
+          </div>
+          
+          <div className="grid gap-4 bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800">
+            <div>
+                <label className="block text-sm text-zinc-500 mb-2 font-medium">Original Text</label>
+                <textarea 
+                  value={contentInput}
+                  onChange={(e) => setContentInput(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-zinc-300 focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all resize-none h-32"
                 />
             </div>
-        </div>
+            <button 
+                onClick={handleRewrite}
+                disabled={isContentLoading}
+                className="btn btn-primary flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-all disabled:opacity-50 bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+                {isContentLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <Sparkles className="w-5 h-5" />}
+                Rewrite Content
+            </button>
 
-        <div className="xl:hidden h-full w-full p-2 md:p-4">
-            {activeTab === 'content' ? (
-                <ContentWriter onContentUpdate={handleContentUpdate} />
-            ) : (
-                <ImageStudio 
-                    initialPrompt={currentContent.slice(0, 100)} 
-                    onImageUpdate={handleImageUpdate}
-                />
+            {contentOutput && (
+                <div className="mt-4">
+                    <div className="flex justify-between items-center mb-2">
+                        <label className="block text-sm text-zinc-500 font-medium">Result</label>
+                        <button onClick={() => copyToClipboard(contentOutput)} className="text-zinc-500 hover:text-indigo-400 transition-colors">
+                            <Copy className="w-4 h-4" />
+                        </button>
+                    </div>
+                    <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-zinc-300 min-h-[100px] whitespace-pre-wrap">
+                        {contentOutput}
+                    </div>
+                </div>
             )}
-        </div>
-      </main>
+          </div>
+        </section>
 
-      {/* Mobile Tab Bar */}
-      <div className="xl:hidden md:hidden bg-white border-t border-slate-200 flex justify-around p-3 shrink-0">
-        <button 
-             onClick={() => setActiveTab('content')}
-             className={`flex flex-col items-center gap-1 text-xs font-medium ${activeTab === 'content' ? 'text-blue-600' : 'text-slate-400'}`}
-           >
-             <PenTool className="w-5 h-5" /> Write
-        </button>
-        <button 
-             onClick={() => setActiveTab('studio')}
-             className={`flex flex-col items-center gap-1 text-xs font-medium ${activeTab === 'studio' ? 'text-purple-600' : 'text-slate-400'}`}
-           >
-             <ImageIcon className="w-5 h-5" /> Studio
-        </button>
+        {/* === Section 2: Image === */}
+        <section className="space-y-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="bg-pink-600/20 p-2 rounded-lg">
+              <ImageIcon className="w-6 h-6 text-pink-500" />
+            </div>
+            <h2 className="text-xl font-semibold text-white">Image</h2>
+          </div>
+          
+          <div className="grid gap-4 bg-zinc-900/50 p-6 rounded-2xl border border-zinc-800">
+            <div>
+                <label className="block text-sm text-zinc-500 mb-2 font-medium">Image Prompt</label>
+                <textarea 
+                  value={imageInput}
+                  onChange={(e) => setImageInput(e.target.value)}
+                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-4 text-zinc-300 focus:ring-2 focus:ring-pink-500/50 focus:border-pink-500 outline-none transition-all resize-none h-32"
+                />
+            </div>
+             <button 
+                onClick={handleGenerateImage}
+                disabled={isImageLoading}
+                className="btn btn-primary flex items-center justify-center gap-2 py-3 rounded-xl font-medium transition-all disabled:opacity-50 bg-pink-600 hover:bg-pink-700 text-white"
+            >
+                {isImageLoading ? <Loader2 className="w-5 h-5 animate-spin"/> : <ImageIcon className="w-5 h-5" />}
+                Generate Image
+            </button>
+
+            {/* ส่วนแสดงผลรูปภาพ และปุ่ม Save ที่แก้ไขแล้ว */}
+            <div className="mt-4 bg-zinc-950 border border-zinc-800 rounded-xl p-2 min-h-[200px] flex items-center justify-center overflow-hidden relative group">
+                {isImageLoading ? (
+                    <Loader2 className="w-8 h-8 text-pink-500 animate-spin" />
+                ) : imageOutput ? (
+                    <>
+                        <img src={imageOutput} alt="Generated" className="w-full h-auto rounded-lg" />
+                        {/* ✅ ปุ่ม Save แบบใหม่: คลิกแล้วเปิดแท็บใหม่ */}
+                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-zinc-900/80 backdrop-blur-sm p-1 rounded-lg border border-zinc-800/50">
+                            <a 
+                                href={imageOutput}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 text-zinc-400 hover:text-white transition-colors"
+                                title="Open in new tab to save"
+                            >
+                                <Download className="w-5 h-5" />
+                            </a>
+                        </div>
+                    </>
+                ) : (
+                    <span className="text-zinc-600 text-sm">Image will appear here</span>
+                )}
+            </div>
+          </div>
+        </section>
+
       </div>
     </div>
   );
-};
+}
 
 export default App;
